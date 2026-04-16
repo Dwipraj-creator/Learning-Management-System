@@ -1,3 +1,4 @@
+// assets/dummyStyles.js
 export const dashboardStyles = {
   // Layout styles
   pageContainer: "min-h-screen pt-25 bg-gradient-to-br from-gray-50 to-gray-100 font-serif relative",
@@ -9,9 +10,8 @@ export const dashboardStyles = {
   headerTitle: "text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-800 mb-2 tracking-tight",
   headerSubtitle: "text-gray-600 text-base sm:text-lg",
 
-  //loading styles
-  // loading styles
-loadingOverlay:
+  // loading 
+  loadingOverlay:
   "fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50",
 
 loadingSpinner:
@@ -412,4 +412,4 @@ export const bookingsStyles = {
   emptyIcon: "h-12 w-12 text-sky-400 mx-auto mb-4",
   emptyTitle: "text-lg font-semibold text-sky-900 mb-2",
   emptyText: "text-sky-600"
-}
+};
