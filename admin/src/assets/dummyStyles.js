@@ -9,6 +9,20 @@ export const dashboardStyles = {
   headerTitle: "text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-800 mb-2 tracking-tight",
   headerSubtitle: "text-gray-600 text-base sm:text-lg",
 
+  //loading styles
+  // loading styles
+loadingOverlay:
+  "fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50",
+
+loadingSpinner:
+  "w-14 h-14 rounded-full bg-[conic-gradient(from_0deg,#6366f1,#8b5cf6,#ec4899,#6366f1)] animate-spin mask-[radial-gradient(farthest-side,transparent_70%,black_71%)]",
+
+loadingContainer:
+  "flex flex-col items-center gap-4",
+
+loadingText:
+  "text-white text-sm sm:text-base font-medium tracking-wide opacity-90",
+
   // Stats section
   statsGrid: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-10",
   statCard: "bg-gradient-to-br from-sky-50 to-sky-300 rounded-full md:p-3 lg:p-5 xl:p-5 shadow-lg p-3 sm:p-6 transform transition-all duration-300 animate-slide-up",
