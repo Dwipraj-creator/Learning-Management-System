@@ -323,16 +323,16 @@ const DashboardPage = () => {
                 </button>
               </div>
             )}
-           {loading && (
-  <div className={dashboardStyles.loadingOverlay}>
-    <div className={dashboardStyles.loadingContainer}>
-      <div className={dashboardStyles.loadingSpinner}></div>
-      <p className={dashboardStyles.loadingText}>
-        Loading dashboard...
-      </p>
-    </div>
-  </div>
-)}
+            {loading && (
+              <div className={dashboardStyles.loadingOverlay}>
+                <div className={dashboardStyles.loadingContainer}>
+                  <div className={dashboardStyles.loadingSpinner}></div>
+                  <p className={dashboardStyles.loadingText}>
+                    Loading dashboard...
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
