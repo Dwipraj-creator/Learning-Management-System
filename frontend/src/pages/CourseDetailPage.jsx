@@ -18,7 +18,9 @@ import {
 import { useUser, useAuth } from "@clerk/clerk-react";
 import { courseDetailStyles } from "../assets/dummyStyles";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  "https://learning-management-system-3-llud.onrender.com";
 
 const fmtMinutes = (mins) => {
   const h = Math.floor((mins || 0) / 60);

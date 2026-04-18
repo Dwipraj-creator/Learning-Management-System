@@ -9,7 +9,9 @@ import { Slide, toast, ToastContainer } from "react-toastify";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  "https://learning-management-system-3-llud.onrender.com";
 
 const StarIcon = ({ filled = false, half = false, className = "" }) => {
   if (half) {

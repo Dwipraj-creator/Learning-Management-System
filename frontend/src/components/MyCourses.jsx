@@ -5,7 +5,9 @@ import { useUser, useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Play, Star, User } from "lucide-react";
-const API_BASE = "http://localhost:4000";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  "https://learning-management-system-3-llud.onrender.com";
 
 const MyCourses = () => {
   const navigate = useNavigate();
