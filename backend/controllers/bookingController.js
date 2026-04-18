@@ -117,7 +117,7 @@ export const checkBooking = async (req, res) => {
 
     // to check enrollment
 
-    const paind =
+    const paid =
       booking.paymentStatus === "Paid" ||
       booking.paymentStatus === "paid" ||
       booking.orderStatus === "Confirmed" ||
@@ -356,7 +356,7 @@ export const getuserBookings = async (req, res) => {
         message: "Unauthorized",
       });
 
-    const bookings = (await Booking.find({ clerkUserId: userId }))
+    const bookings = await Booking.find({ clerkUserId: userId })
       .sort({ createdAt: -1 })
       .lean();
     return res.json({
