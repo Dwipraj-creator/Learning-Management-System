@@ -1,22 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { courseDetailStyles } from "../assets/dummyStyles";
-import coursesData from "../assets/dummyData";
+import React, { useMemo, useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
-  BookOpen,
-  Clock,
-  Target,
-  User,
-  X,
   Play,
+  Clock,
+  BookOpen,
   ChevronDown,
-  ArrowRight,
-  Award,
-  Sparkles,
   CheckCircle,
   Circle,
+  X,
+  ArrowLeft,
+  User,
+  Award,
+  Target,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useUser, useAuth } from "@clerk/clerk-react";
+import { courseDetailStyles } from "../assets/dummyStyles";
+
+const API_BASE = "http://localhost:4000";
 
 const fmtMinutes = (mins) => {
   const h = Math.floor((mins || 0) / 60);
@@ -49,53 +51,40 @@ const Toast = ({ message, type = "info", onClose }) => {
   );
 };
 
+/* helpers */
 const toEmbedUrl = (url) => {
-  if (!url) return "";
+  if (!url) return undefined;
   try {
     const trimmed = String(url).trim();
+    if (!trimmed) return undefined;
     if (/\/embed\//.test(trimmed)) return trimmed;
-
     const watchMatch = trimmed.match(/[?&]v=([^&#]+)/);
-    if (watchMatch && watchMatch[1]) {
+    if (watchMatch && watchMatch[1])
       return `https://www.youtube.com/embed/${watchMatch[1]}`;
-    }
-
     const shortMatch = trimmed.match(/youtu\.be\/([^?&#/]+)/);
-    if (shortMatch && shortMatch[1]) {
+    if (shortMatch && shortMatch[1])
       return `https://www.youtube.com/embed/${shortMatch[1]}`;
-    }
-
     if (/drive\.google\.com/.test(trimmed)) {
       const fileMatch = trimmed.match(/\/file\/d\/([^/]+)(?:\/|$)/);
-      if (fileMatch && fileMatch[1]) {
+      if (fileMatch && fileMatch[1])
         return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
-      }
-
       const idMatch = trimmed.match(/[?&]id=([^&#]+)/);
-      if (idMatch && idMatch[1]) {
+      if (idMatch && idMatch[1])
         return `https://drive.google.com/file/d/${idMatch[1]}/preview`;
-      }
-
-      const ucMatch = trimmed.match(/[?&]export=download.*[?&]id=([^&#]+)/);
-      if (ucMatch && ucMatch[1]) {
-        return `https://drive.google.com/file/d/${ucMatch[1]}/preview`;
-      }
-
       return trimmed;
     }
     const lastSeg = trimmed.split("/").filter(Boolean).pop();
     if (lastSeg && lastSeg.length === 11 && /^[a-zA-Z0-9_-]+$/.test(lastSeg)) {
       return `https://www.youtube.com/embed/${lastSeg}`;
     }
-
-    return trimmed;
+    return trimmed || undefined;
   } catch (e) {
     return url;
   }
 };
 
 const appendAutoplay = (embedUrl, autoplay = true) => {
-  if (!embedUrl) return "";
+  if (!embedUrl) return undefined;
   if (!autoplay) return embedUrl;
   return embedUrl.includes("?")
     ? `${embedUrl}&autoplay=1`
@@ -107,14 +96,49 @@ const isDirectVideoFile = (url) => {
   return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 };
 
+const normalizeCourse = (c) => {
+  if (!c) return c;
+  const course = { ...c };
+  course.lectures = Array.isArray(course.lectures)
+    ? course.lectures.map((l) => {
+        const lecture = { ...l };
+        lecture.durationMin =
+          lecture.durationMin ??
+          lecture.totalMinutes ??
+          (lecture.duration?.hours || 0) * 60 +
+            (lecture.duration?.minutes || 0);
+        lecture.chapters = Array.isArray(lecture.chapters)
+          ? lecture.chapters.map((ch) => {
+              const chapter = { ...ch };
+              chapter.durationMin =
+                chapter.durationMin ??
+                chapter.totalMinutes ??
+                (chapter.duration?.hours || 0) * 60 +
+                  (chapter.duration?.minutes || 0);
+              return chapter;
+            })
+          : [];
+        return lecture;
+      })
+    : [];
+  return course;
+};
+
 const CourseDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const courseId = parseInt(id, 10);
+  const courseId = id;
 
-  const [isLoggedIn] = useState(true);
-  // Initialize enrollment based on whether course is free
+  const { user } = useUser();
+  const { getToken } = useAuth();
+  const isLoggedIn = Boolean(user);
+
+  const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [bookingInfo, setBookingInfo] = useState(null);
   const [isEnrolling, setIsEnrolling] = useState(false);
 
   const [toast, setToast] = useState(null);
@@ -123,45 +147,172 @@ const CourseDetailPage = () => {
   const [isTeacherAnimating, setIsTeacherAnimating] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
 
-  // find course from dummy data
-  const course = coursesData.find((c) => c.id === courseId);
+  const studentNameFromUser = useMemo(() => {
+    if (!user) return "";
+    const fullName =
+      user.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+    const email =
+      user.primaryEmailAddress?.emailAddress ||
+      (user.emailAddresses && user.emailAddresses[0]?.emailAddress) ||
+      "";
+    return fullName || email || "";
+  }, [user]);
 
-  // Check if course is free
-  const isCourseFree = course?.isFree || !course?.price;
-
-  // initialize enrollment state based on course type
+  const studentEmailFromUser = useMemo(() => {
+    if (!user) return "";
+    return (
+      user.primaryEmailAddress?.emailAddress ||
+      (user.emailAddresses && user.emailAddresses[0]?.emailAddress) ||
+      ""
+    );
+  }, [user]);
 
   useEffect(() => {
-    if (isCourseFree) {
-      setIsEnrolled(true); // auto-enroll for free course
-    } else {
-      setIsEnrolled(false);
-    }
-  }, [isCourseFree]);
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    fetch(`${API_BASE}/api/course/${courseId}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Failed to fetch course ${courseId}`);
+        }
+        return res.json();
+      })
+      .then((json) => {
+        if (!mounted) return;
+        if (!json || !json.success) {
+          throw new Error((json && json.message) || "Failed to load course");
+        }
+        const normalized = normalizeCourse(json.course);
+        setCourse(normalized);
+
+        // DO NOT auto set isEnrolled for free courses; rely on server booking check
+        setIsEnrolled(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load course:", err);
+        if (mounted) setError(err.message || "Failed to load course");
+      })
+      .finally(() => mounted && setLoading(false));
+
+    return () => {
+      mounted = false;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!course) return;
+
+    const checkEnrollment = async () => {
+      const q = `${API_BASE}/api/booking/check?courseId=${encodeURIComponent(
+        course._id ?? course.id ?? courseId,
+      )}`;
+
+      const headers = { "Content-Type": "application/json" };
+      let opts = { method: "GET", credentials: "include", headers };
+
+      if (typeof getToken === "function") {
+        try {
+          const token = await Promise.race([
+            getToken().catch(() => null),
+            new Promise((r) => setTimeout(() => r(null), 1500)),
+          ]);
+          if (token) {
+            headers.Authorization = `Bearer ${token}`;
+            opts = { method: "GET", headers };
+          }
+        } catch (e) {
+          console.debug("getToken failed, falling back to cookie auth:", e);
+          opts = { method: "GET", credentials: "include", headers };
+        }
+      }
+
+      try {
+        const res = await fetch(q, opts);
+
+        if (res.status === 404) {
+          console.debug("booking.check 404; no booking route present");
+          setBookingInfo(null);
+          setIsEnrolled(false);
+          return;
+        }
+
+        const data = await res.json().catch(() => null);
+        if (!data) {
+          setBookingInfo(null);
+          setIsEnrolled(false);
+          return;
+        }
+
+        const booking = data.booking || null;
+        const serverSaysEnrolled = !!(
+          data.enrolled ||
+          data.userEnrolled ||
+          data.bookingExists ||
+          data.alreadyBooked
+        );
+
+        const bookingPaidOrConfirmed =
+          booking &&
+          (serverSaysEnrolled ||
+            booking.paymentStatus === "Paid" ||
+            booking.paymentStatus === "paid" ||
+            booking.orderStatus === "Confirmed" ||
+            booking.orderStatus === "confirmed" ||
+            !!booking.paidAt);
+
+        if (!mounted) return;
+
+        if (bookingPaidOrConfirmed) {
+          setBookingInfo(booking || null);
+          setIsEnrolled(true);
+          return;
+        }
+
+        if (booking) {
+          // booking exists but not paid/confirmed
+          setBookingInfo(booking);
+          setIsEnrolled(false);
+          return;
+        }
+
+        // no booking
+        setBookingInfo(null);
+        setIsEnrolled(false);
+      } catch (err) {
+        console.debug("booking.check failed:", err);
+        // network error: leave as not enrolled
+      }
+    };
+
+    checkEnrollment();
+    return () => (mounted = false);
+  }, [course, getToken, courseId, isLoggedIn]);
 
   useEffect(() => {
     setIsTeacherAnimating(true);
-    const timer = setTimeout(() => setIsTeacherAnimating(false), 1000);
+    const timer = setTimeout(() => setIsTeacherAnimating(false), 800);
     return () => clearTimeout(timer);
   }, [course]);
 
-  // only animate teacher name
-  useEffect(() => {
-    setIsPageLoaded(true);
-  }, []);
+  useEffect(() => setIsPageLoaded(true), []);
 
-  // selected content is null by default — user must click to select
   const [selectedContent, setSelectedContent] = useState({
-    type: "null", // 'lecture' or 'chapter'
+    type: null,
     lectureId: null,
     chapterId: null,
   });
 
   const selectedLecture = useMemo(() => {
-    if (!selectedContent.lectureId) return null;
+    if (!selectedContent.lectureId || !course) return null;
     return (
-      (course?.lectures || []).find(
-        (l) => l.id === selectedContent.lectureId,
+      (course.lectures || []).find(
+        (l) =>
+          String(l.id) === String(selectedContent.lectureId) ||
+          String(l._id) === String(selectedContent.lectureId),
       ) || null
     );
   }, [course, selectedContent.lectureId]);
@@ -170,27 +321,30 @@ const CourseDetailPage = () => {
     if (!selectedContent.chapterId || !selectedLecture) return null;
     return (
       (selectedLecture.chapters || []).find(
-        (ch) => ch.id === selectedContent.chapterId,
+        (ch) =>
+          String(ch.id) === String(selectedContent.chapterId) ||
+          String(ch._id) === String(selectedContent.chapterId),
       ) || null
     );
   }, [selectedLecture, selectedContent.chapterId]);
 
   const currentVideoContent = useMemo(() => {
-    if (selectedContent.type === "chapter" && selectedChapter) {
+    if (selectedContent.type === "chapter" && selectedChapter)
       return selectedChapter;
-    }
-    if (selectedContent.type === "lecture" && selectedLecture) {
-      return selectedLecture;
-    }
+    // Lectures don't have videoUrl, only chapters do
+    if (selectedContent.type === "lecture" && selectedLecture) return null;
     return null;
   }, [selectedContent, selectedLecture, selectedChapter]);
 
-  const totalMinutes = useMemo(() => {
-    return (course?.lectures || []).reduce(
-      (sum, l) => sum + (l.durationMin || 0),
-      0,
-    );
-  }, [course]);
+  const totalMinutes = useMemo(
+    () =>
+      (course?.lectures || []).reduce(
+        (sum, l) => sum + (l.durationMin || l.totalMinutes || 0),
+        0,
+      ),
+    [course],
+  );
+
   const priceObj = course?.price;
   const hasPriceObj = !!(
     priceObj &&
@@ -200,20 +354,34 @@ const CourseDetailPage = () => {
     hasPriceObj && priceObj.sale != null ? Number(priceObj.sale) : null;
   const originalPrice =
     hasPriceObj && priceObj.original != null ? Number(priceObj.original) : null;
-  const formatCurrency = (n) => {
-    if (n == null || Number.isNaN(n)) return "";
-    return `₹${n}`;
-  };
-  const priceLabel =
-    salePrice != null
-      ? formatCurrency(salePrice)
-      : originalPrice != null
-        ? formatCurrency(originalPrice)
-        : "Free";
+  const formatCurrency = (n) => (n == null || Number.isNaN(n) ? "" : `₹${n}`);
+  const courseIsFree = course
+    ? !!course.isFree ||
+      !course.price ||
+      (!course.price.sale && !course.price.original) ||
+      course.pricingType === "free"
+    : true;
   const hasDiscount =
     originalPrice != null && salePrice != null && originalPrice > salePrice;
 
-  // --- Handlers --- //
+  const bookingPendingPayment =
+    bookingInfo &&
+    ((bookingInfo.paymentStatus &&
+      /unpaid/i.test(String(bookingInfo.paymentStatus))) ||
+      (bookingInfo.orderStatus &&
+        /pending/i.test(String(bookingInfo.orderStatus)))) &&
+    (salePrice || originalPrice || bookingInfo.price);
+
+  // handlers
+  const toggleLecture = (lectureId) => {
+    setExpandedLectures((prev) => {
+      const next = new Set(prev);
+      if (next.has(lectureId)) next.delete(lectureId);
+      else next.add(lectureId);
+      return next;
+    });
+  };
+
   const onLectureHeaderClick = (lectureId) => {
     if (!isLoggedIn) {
       setToast({
@@ -222,23 +390,43 @@ const CourseDetailPage = () => {
       });
       return;
     }
-    if (!isCourseFree && !isEnrolled) {
-      setToast({
-        message: "Please enroll in the course to access content",
-        type: "error",
+    const isOpen = expandedLectures.has(lectureId);
+    if (isOpen) {
+      setExpandedLectures((prev) => {
+        const next = new Set(prev);
+        next.delete(lectureId);
+        return next;
       });
+      if (selectedContent.lectureId === lectureId) {
+        setSelectedContent({
+          type: "lecture",
+          lectureId: null,
+          chapterId: null,
+        });
+      }
       return;
     }
-    setExpandedLectures((prev) => {
-      const next = new Set(prev);
-      if (next.has(lectureId)) next.delete(lectureId);
-      else next.add(lectureId);
-      return next;
-    }); // it will check for user is logged in or not
-  }; // then it will check for is the  course is free
-  // then it will show the details of the lectures
 
-  // clicking a chapter selects it (plays) and ensures its lecture is expanded
+    // Now require server-enrollment even for free courses
+    if (!isEnrolled) {
+      if (bookingPendingPayment) {
+        setToast({
+          message: "Payment pending — complete payment to view chapters",
+          type: "error",
+        });
+      } else {
+        setToast({
+          message: "Please enroll in the course to view chapters",
+          type: "error",
+        });
+      }
+      return;
+    }
+
+    setExpandedLectures((prev) => new Set([...prev, lectureId]));
+    handleContentSelect(lectureId, null);
+  };
+
   const handleContentSelect = (lectureId, chapterId = null) => {
     if (!isLoggedIn) {
       setToast({
@@ -248,14 +436,12 @@ const CourseDetailPage = () => {
       return;
     }
 
-    // For free courses OR enrolled paid courses, allow access
-    if (isCourseFree || isEnrolled) {
+    if (isEnrolled) {
       setSelectedContent({
         type: chapterId ? "chapter" : "lecture",
         lectureId,
         chapterId,
       });
-
       setExpandedLectures((prev) => {
         const next = new Set(prev);
         next.add(lectureId);
@@ -264,20 +450,24 @@ const CourseDetailPage = () => {
       return;
     }
 
-    // For paid courses when not enrolled, show enroll toast
-    if (!isCourseFree && !isEnrolled) {
+    if (!isEnrolled) {
+      if (bookingPendingPayment) {
+        setToast({
+          message:
+            "You have a pending payment — complete it to access the course.",
+          type: "error",
+        });
+        return;
+      }
       setToast({
         message: "Please enroll in the course to access this content",
         type: "error",
       });
-      return;
     }
   };
 
-  // this function helps in toggling the course to complete
   const toggleChapterCompletion = (chapterId, e) => {
     if (e) e.stopPropagation();
-
     if (!isLoggedIn || !isEnrolled) {
       setToast({
         message: "Please enroll and login to track progress",
@@ -285,7 +475,6 @@ const CourseDetailPage = () => {
       });
       return;
     }
-
     setCompletedChapters((prev) => {
       const next = new Set(prev);
       if (next.has(chapterId)) next.delete(chapterId);
@@ -302,24 +491,141 @@ const CourseDetailPage = () => {
       });
       return;
     }
+    if (!course) {
+      setToast({ message: "Course not loaded", type: "error" });
+      return;
+    }
+
+    // prevent duplicate enroll attempts
+    if (isEnrolling) return;
 
     setIsEnrolling(true);
-    // Simulate enrollment process
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const numericPrice =
+        salePrice != null
+          ? salePrice
+          : originalPrice != null
+            ? originalPrice
+            : 0;
+      const payload = {
+        courseId: course._id ?? course.id ?? courseId,
+        courseName: course.name,
+        teacherName: course.teacher || "",
+        price: numericPrice,
+        studentName: studentNameFromUser || "",
+        email: studentEmailFromUser || "",
+      };
 
-    setIsEnrolled(true);
-    setIsEnrolling(false);
-    setToast({
-      message:
-        " Successfully enrolled in the course! You can now access all content.",
-      type: "info",
-    });
+      const headers = { "Content-Type": "application/json" };
+      let opts = {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify(payload),
+      };
+      if (typeof getToken === "function") {
+        try {
+          const token = await getToken().catch(() => null);
+          if (token) {
+            headers.Authorization = `Bearer ${token}`;
+            opts = { method: "POST", headers, body: JSON.stringify(payload) };
+          }
+        } catch (e) {}
+      }
+
+      const res = await fetch(`${API_BASE}/api/booking/create`, opts);
+      const data = await res
+        .json()
+        .catch(() => ({ success: false, message: "Invalid response" }));
+
+      if (!res.ok || !data.success) {
+        const msg =
+          (data && (data.message || data.error)) ||
+          `Failed to create booking (${res.status})`;
+        const alreadyBooked =
+          /already booked|already enrolled|booking exists/i.test(msg) ||
+          data.alreadyBooked ||
+          data.bookingExists;
+        if (alreadyBooked) {
+          setToast({
+            message:
+              "You already have a booking — please check My Courses to view status.",
+            type: "info",
+          });
+          return;
+        }
+        throw new Error(msg);
+      }
+
+      // If Stripe checkout URL returned, redirect
+      if (data.checkoutUrl) {
+        if (data.booking) setBookingInfo(data.booking);
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // For free course or server-confirmed booking
+      if (data.booking) {
+        setBookingInfo(data.booking);
+        const b = data.booking;
+        const paid =
+          b.paymentStatus === "Paid" ||
+          b.paymentStatus === "paid" ||
+          b.orderStatus === "Confirmed" ||
+          b.orderStatus === "confirmed" ||
+          !!b.paidAt;
+
+        if (paid) {
+          setIsEnrolled(true);
+          setToast({
+            message:
+              numericPrice === 0
+                ? "Enrolled successfully (free course)."
+                : "Enrollment succeeded.",
+            type: "info",
+          });
+          if (numericPrice > 0) navigate("/my-courses");
+          return;
+        }
+
+        if (numericPrice > 0 && !paid) {
+          setIsEnrolled(false);
+          setToast({
+            message: "Booking created — complete payment to access the course.",
+            type: "info",
+          });
+          return;
+        }
+
+        setIsEnrolled(true);
+        setToast({ message: "Enrolled.", type: "info" });
+        return;
+      }
+
+      // fallback
+      if (data.success) {
+        if (numericPrice === 0) {
+          setIsEnrolled(true);
+          setToast({ message: "Enrolled (free course).", type: "info" });
+        } else {
+          setToast({
+            message: "Enrollment initiated, complete payment.",
+            type: "info",
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Enroll error:", err);
+      setToast({ message: err.message || "Enrollment failed", type: "error" });
+    } finally {
+      setIsEnrolling(false);
+    }
   };
 
-  const handleBackToHome = () => {
-    navigate("/");
-  };
-  // if no course found
+  const handleBackToHome = () => navigate("/");
+
+  if (loading) return <div className="p-6 text-center">Loading course...</div>;
+  if (error) return <div className="p-6 text-center text-red-500">{error}</div>;
   if (!course) {
     return (
       <div className={courseDetailStyles.notFoundContainer}>
@@ -339,7 +645,6 @@ const CourseDetailPage = () => {
     );
   }
 
-  // Compute an embeddable URL for the currently selected content (if any)
   const currentRawUrl = currentVideoContent?.videoUrl || null;
   const currentEmbedUrl = currentRawUrl ? toEmbedUrl(currentRawUrl) : null;
   const currentIsDirectVideo = isDirectVideoFile(currentEmbedUrl);
@@ -367,24 +672,29 @@ const CourseDetailPage = () => {
             className={courseDetailStyles.backButton}
           >
             <ArrowLeft className={courseDetailStyles.backIcon} />
-            <span className={courseDetailStyles.backText}>Back To Home</span>
+            <span className={courseDetailStyles.backText}>Back to Home</span>
           </button>
+
+          <div>{/* Refresh booking status removed per request */}</div>
         </div>
+
         <div className={courseDetailStyles.header}>
           <div className={courseDetailStyles.badge}>
             <BookOpen className={courseDetailStyles.badgeIcon} />
             <span className={courseDetailStyles.badgeText}>
-              {isCourseFree ? "Free Course" : "Premium Course"}
+              {courseIsFree ? "Free Course" : "Premium Course"}
             </span>
           </div>
+
           <h1 className={courseDetailStyles.title}>{course.name}</h1>
+
           {course.overview && (
             <div className={courseDetailStyles.overviewContainer}>
               <div className={courseDetailStyles.overview}>
                 <div className={courseDetailStyles.overviewHeader}>
                   <Target className={courseDetailStyles.overviewIcon} />
                   <h3 className={courseDetailStyles.overviewTitle}>
-                    Course OverView
+                    Course Overview
                   </h3>
                 </div>
                 <p className={courseDetailStyles.overviewText}>
@@ -393,6 +703,7 @@ const CourseDetailPage = () => {
               </div>
             </div>
           )}
+
           <div
             className={`${courseDetailStyles.statsContainer} animation-delay-300`}
           >
@@ -408,6 +719,7 @@ const CourseDetailPage = () => {
                 {(course.lectures || []).length} lectures
               </span>
             </div>
+
             <div
               className={`${courseDetailStyles.teacherStat} ${
                 isTeacherAnimating ? courseDetailStyles.teacherAnimating : ""
@@ -420,12 +732,10 @@ const CourseDetailPage = () => {
             </div>
           </div>
         </div>
-        {/* Main Content Grid */}
+
         <div className={courseDetailStyles.mainGrid}>
-          {/* Enhanced Video Player */}
           <div className={courseDetailStyles.videoSection}>
             <div className={courseDetailStyles.videoContainer}>
-              {/* if direct video file -> use HTML5 video, else iframe */}
               {currentEmbedUrl ? (
                 currentIsDirectVideo ? (
                   <video
@@ -436,13 +746,13 @@ const CourseDetailPage = () => {
                 ) : (
                   <iframe
                     title={
-                      currentVideoContent.title ||
-                      currentVideoContent.name ||
+                      currentVideoContent?.title ||
+                      currentVideoContent?.name ||
                       "video-player"
                     }
                     src={appendAutoplay(
                       currentEmbedUrl,
-                      isLoggedIn && (isEnrolled || isCourseFree),
+                      isLoggedIn && isEnrolled,
                     )}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
@@ -468,9 +778,13 @@ const CourseDetailPage = () => {
                     <p className={courseDetailStyles.videoPlaceholderText}>
                       Select a lecture or chapter to play video
                     </p>
-                    {(!isLoggedIn || (!isEnrolled && !isCourseFree)) && (
+                    {(!isLoggedIn || !isEnrolled) && (
                       <p className={courseDetailStyles.videoPlaceholderSubtext}>
-                        {!isLoggedIn ? "Login required" : "Enrollment required"}
+                        {!isLoggedIn
+                          ? "Login required"
+                          : bookingPendingPayment
+                            ? "Payment pending"
+                            : "Enrollment required"}
                       </p>
                     )}
                   </div>
@@ -508,57 +822,52 @@ const CourseDetailPage = () => {
                   </div>
                 </div>
 
-                {/* Enhanced Completion Button */}
-                {isLoggedIn &&
-                  (isEnrolled || isCourseFree) &&
-                  selectedContent.chapterId && (
-                    <div className={courseDetailStyles.completionSection}>
-                      <button
-                        onClick={() =>
-                          toggleChapterCompletion(selectedContent.chapterId)
-                        }
-                        className={`${courseDetailStyles.completionButton} ${
-                          completedChapters.has(selectedContent.chapterId)
-                            ? courseDetailStyles.completionButtonCompleted
-                            : courseDetailStyles.completionButtonIncomplete
-                        }`}
-                      >
-                        {completedChapters.has(selectedContent.chapterId) ? (
-                          <>
-                            <CheckCircle
-                              className={courseDetailStyles.completionIcon}
-                            />
-                            Chapter Completed
-                          </>
-                        ) : (
-                          <>
-                            <Circle
-                              className={courseDetailStyles.completionIcon}
-                            />
-                            Mark as Complete
-                          </>
-                        )}
-                      </button>
-                      <p className={courseDetailStyles.completionText}>
-                        {completedChapters.has(selectedContent.chapterId)
-                          ? "Great job! You've completed this chapter."
-                          : "Click to mark this chapter as completed."}
-                      </p>
-                    </div>
-                  )}
+                {isLoggedIn && isEnrolled && selectedContent.chapterId && (
+                  <div className={courseDetailStyles.completionSection}>
+                    <button
+                      onClick={() =>
+                        toggleChapterCompletion(selectedContent.chapterId)
+                      }
+                      className={`${courseDetailStyles.completionButton} ${
+                        completedChapters.has(selectedContent.chapterId)
+                          ? courseDetailStyles.completionButtonCompleted
+                          : courseDetailStyles.completionButtonIncomplete
+                      }`}
+                    >
+                      {completedChapters.has(selectedContent.chapterId) ? (
+                        <>
+                          <CheckCircle
+                            className={courseDetailStyles.completionIcon}
+                          />
+                          Chapter Completed
+                        </>
+                      ) : (
+                        <>
+                          <Circle
+                            className={courseDetailStyles.completionIcon}
+                          />
+                          Mark as Complete
+                        </>
+                      )}
+                    </button>
+                    <p className={courseDetailStyles.completionText}>
+                      {completedChapters.has(selectedContent.chapterId)
+                        ? "Great job! You've completed this chapter."
+                        : "Click to mark this chapter as completed."}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Enhanced Lectures & Sidebar */}
           <aside className={courseDetailStyles.sidebar}>
-            {/* Enhanced Course Content */}
             <div className={courseDetailStyles.contentCard}>
               <div className={courseDetailStyles.contentHeader}>
                 <h4 className={courseDetailStyles.contentTitle}>
                   Course Content
                 </h4>
-                {isCourseFree && (
+                {courseIsFree && (
                   <div className={courseDetailStyles.freeBadge}>
                     <Sparkles className={courseDetailStyles.freeBadgeIcon} />
                     Free Access
@@ -569,23 +878,25 @@ const CourseDetailPage = () => {
               <div className={courseDetailStyles.contentList}>
                 {(course.lectures || []).map((lecture, index) => (
                   <div
-                    key={lecture.id}
+                    key={lecture.id ?? lecture._id ?? index}
                     className={courseDetailStyles.lectureItem}
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div
                       className={`${courseDetailStyles.lectureHeader} ${
-                        expandedLectures.has(lecture.id)
+                        expandedLectures.has(lecture.id ?? lecture._id)
                           ? courseDetailStyles.lectureHeaderExpanded
                           : courseDetailStyles.lectureHeaderCollapsed
                       }`}
-                      onClick={() => onLectureHeaderClick(lecture.id)}
+                      onClick={() =>
+                        onLectureHeaderClick(lecture.id ?? lecture._id)
+                      }
                     >
                       <div className={courseDetailStyles.lectureHeaderContent}>
                         <div className={courseDetailStyles.lectureLeftSection}>
                           <div
                             className={`${courseDetailStyles.lectureChevron} ${
-                              expandedLectures.has(lecture.id)
+                              expandedLectures.has(lecture.id ?? lecture._id)
                                 ? courseDetailStyles.lectureChevronExpanded
                                 : courseDetailStyles.lectureChevronCollapsed
                             }`}
@@ -616,28 +927,32 @@ const CourseDetailPage = () => {
                       </div>
                     </div>
 
-                    {expandedLectures.has(lecture.id) && (
+                    {expandedLectures.has(lecture.id ?? lecture._id) && (
                       <div className={courseDetailStyles.chapterList}>
                         {(lecture.chapters || []).map((chapter) => {
-                          const isCompleted = completedChapters.has(chapter.id);
+                          const chapId = chapter.id ?? chapter._id;
+                          const isCompleted = completedChapters.has(chapId);
                           const isSelected =
-                            selectedContent.chapterId === chapter.id &&
-                            selectedContent.lectureId === lecture.id;
-
+                            selectedContent.chapterId === chapId &&
+                            selectedContent.lectureId ===
+                              (lecture.id ?? lecture._id);
                           return (
                             <div
-                              key={chapter.id}
+                              key={chapId}
                               className={`${courseDetailStyles.chapterItem} ${
                                 isSelected
                                   ? courseDetailStyles.chapterSelected
                                   : courseDetailStyles.chapterNotSelected
                               } ${
-                                !isCourseFree && !isEnrolled
+                                !isEnrolled
                                   ? courseDetailStyles.chapterDisabled
                                   : ""
                               }`}
                               onClick={() =>
-                                handleContentSelect(lecture.id, chapter.id)
+                                handleContentSelect(
+                                  lecture.id ?? lecture._id,
+                                  chapId,
+                                )
                               }
                             >
                               <div
@@ -651,9 +966,8 @@ const CourseDetailPage = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (isCourseFree || isEnrolled) {
-                                        toggleChapterCompletion(chapter.id, e);
-                                      }
+                                      if (isEnrolled)
+                                        toggleChapterCompletion(chapId, e);
                                     }}
                                     className={`${
                                       courseDetailStyles.completionToggle
@@ -662,7 +976,7 @@ const CourseDetailPage = () => {
                                         ? courseDetailStyles.completionToggleCompleted
                                         : courseDetailStyles.completionToggleIncomplete
                                     }`}
-                                    disabled={!isCourseFree && !isEnrolled}
+                                    disabled={!isEnrolled}
                                   >
                                     {isCompleted ? (
                                       <CheckCircle
@@ -721,7 +1035,6 @@ const CourseDetailPage = () => {
               </div>
             </div>
 
-            {/* Enhanced Pricing Card */}
             <div
               className={`${courseDetailStyles.pricingCard} animation-delay-200`}
             >
@@ -731,7 +1044,7 @@ const CourseDetailPage = () => {
 
               <div className={courseDetailStyles.pricingAmount}>
                 <div className={courseDetailStyles.price}>
-                  {isCourseFree
+                  {courseIsFree
                     ? "Free"
                     : salePrice != null
                       ? formatCurrency(salePrice)
@@ -740,13 +1053,12 @@ const CourseDetailPage = () => {
                         : "Free"}
                 </div>
 
-                {!isCourseFree && hasDiscount && (
+                {!courseIsFree && hasDiscount && (
                   <div className={courseDetailStyles.originalPrice}>
                     {formatCurrency(originalPrice)}
                   </div>
                 )}
-
-                {!isCourseFree && hasDiscount && (
+                {!courseIsFree && hasDiscount && (
                   <div className={courseDetailStyles.discountBadge}>
                     {Math.round(
                       ((originalPrice - salePrice) / originalPrice) * 100,
@@ -757,43 +1069,75 @@ const CourseDetailPage = () => {
               </div>
 
               <p className={courseDetailStyles.pricingDescription}>
-                {isCourseFree
+                {courseIsFree
                   ? "Free access · Learn anytime"
                   : "One-time payment · Lifetime access "}
               </p>
 
               <div className="mt-6">
-                {isCourseFree ? (
-                  <button
-                    disabled
-                    className={`${courseDetailStyles.enrollButton} ${courseDetailStyles.freeEnrolledButton}`}
-                  >
-                    <CheckCircle className={courseDetailStyles.enrollIcon} />
-                    Free Course - Access Granted
-                  </button>
-                ) : !isEnrolled ? (
-                  <button
-                    onClick={handleEnroll}
-                    disabled={isEnrolling}
-                    className={`${courseDetailStyles.enrollButton} ${courseDetailStyles.enrollPaidButton}`}
-                  >
-                    {isEnrolling ? (
-                      <>
-                        <div className={courseDetailStyles.enrollSpinner}></div>
-                        Enrolling...
-                      </>
-                    ) : (
-                      <>
-                        <Play className={courseDetailStyles.enrollIcon} />
-                        Enroll Now
-                        <span>
-                          <ArrowRight
-                            className={courseDetailStyles.enrollArrow}
-                          />
-                        </span>
-                      </>
-                    )}
-                  </button>
+                {/* NEW: show Enroll button for both free and paid courses until server confirms booking */}
+                {!isEnrolled ? (
+                  bookingPendingPayment ? (
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => handleEnroll()}
+                        disabled={isEnrolling}
+                        className={`${courseDetailStyles.enrollButton} ${courseDetailStyles.enrollPaidButton}`}
+                      >
+                        {isEnrolling ? (
+                          <>
+                            <div
+                              className={courseDetailStyles.enrollSpinner}
+                            ></div>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Play className={courseDetailStyles.enrollIcon} />
+                            {courseIsFree
+                              ? "Enroll (Free)"
+                              : "Complete Payment"}
+                            <span>
+                              <ArrowRight
+                                className={courseDetailStyles.enrollArrow}
+                              />
+                            </span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => navigate("/my-courses")}
+                        className="text-sm underline"
+                      >
+                        View booking (My Courses)
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleEnroll}
+                      disabled={isEnrolling}
+                      className={`${courseDetailStyles.enrollButton} ${courseDetailStyles.enrollPaidButton}`}
+                    >
+                      {isEnrolling ? (
+                        <>
+                          <div
+                            className={courseDetailStyles.enrollSpinner}
+                          ></div>
+                          Enrolling...
+                        </>
+                      ) : (
+                        <>
+                          <Play className={courseDetailStyles.enrollIcon} />
+                          {courseIsFree ? "Enroll (Free)" : "Enroll Now"}
+                          <span>
+                            <ArrowRight
+                              className={courseDetailStyles.enrollArrow}
+                            />
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  )
                 ) : (
                   <button
                     disabled
@@ -806,7 +1150,6 @@ const CourseDetailPage = () => {
               </div>
             </div>
 
-            {/* Enhanced Progress Summary */}
             <div
               className={`${courseDetailStyles.progressCard} animation-delay-400`}
             >
@@ -867,6 +1210,7 @@ const CourseDetailPage = () => {
           </aside>
         </div>
       </div>
+
       <style jsx>{courseDetailStyles.animations}</style>
     </div>
   );

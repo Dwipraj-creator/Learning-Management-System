@@ -4,16 +4,17 @@ import logo from "../assets/logo.png";
 import {
   BookMarked,
   BookOpen,
+  BookOpenText,
   Contact,
   Home,
   Menu,
   Users,
   X,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { href, NavLink } from "react-router-dom";
 import { useClerk, UserButton, useUser,useAuth } from "@clerk/clerk-react";
 
-const navItems = [
+const baseNav = [
   { name: "Home", icon: Home, href: "/" },
   { name: "Courses", icon: BookOpen, href: "/courses" },
   { name: "About", icon: BookMarked, href: "/about" },
@@ -34,6 +35,11 @@ const [isOpen, setIsOpen] = useState(false);
   
   const menuRef = useRef(null);
  const isLoggedIn = isSignedIn && Boolean(localStorage.getItem("token"));
+
+ const navItems = isSignedIn ? [
+  ...baseNav,
+  {name:"My Courses",icon:BookOpenText,href:"/mycourses"}
+ ]:baseNav;
 
  // fetch token ; 
 

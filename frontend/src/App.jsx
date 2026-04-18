@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import Navbar from "./components/Navbar";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import About from "./pages/About";
@@ -9,6 +8,8 @@ import Courses from "./pages/Courses";
 import { ArrowUp } from "lucide-react";
 import CourseDetailPageHome from "./pages/CourseDetailPageHome";
 import CourseDetailPage from "./pages/CourseDetailPage";
+import MyCoursePage from "./pages/MyCoursePage";
+// import VeryfyPaymentPage from "../VeryfyPaymentPage";
 
 const ProtectedRoute = ({ children }) => {
   const location = useLocation();
@@ -69,6 +70,7 @@ const App = () => {
         <Route path="/contact" element={<Contact />} />
         <Route path="/faculty" element={<Faculty />} />
         <Route path="/courses" element={<Courses />} />
+        <Route path="/mycourses" element={<MyCoursePage />} />
         <Route
           path="/course/:id"
           element={
@@ -85,6 +87,8 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        {/* <Route path="/booking/success" element={<VeryfyPaymentPage />} /> */}
+        {/* <Route path="/booking/cancel" element={<VeryfyPaymentPage />} /> */}
       </Routes>
       <ScrollTopButton threshold={250} />
     </>
