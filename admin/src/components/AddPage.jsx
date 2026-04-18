@@ -19,7 +19,9 @@ import {
   X,
 } from "lucide-react";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  "https://learning-management-system-3-llud.onrender.com";
 // formatDuration accepts either {hours, minutes} or (hours, minutes)
 const formatDuration = (a, b) => {
   let hours = 0;

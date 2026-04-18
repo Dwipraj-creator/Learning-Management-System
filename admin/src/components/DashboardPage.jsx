@@ -9,7 +9,9 @@ import {
   Users,
 } from "lucide-react";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  "https://learning-management-system-3-llud.onrender.com";
 const fmtCurrency = (n) => {
   if (n == null) return "₹0";
   const num = Number(n);
