@@ -28,6 +28,102 @@ const StarIcon = ({ filled = false, half = false, className = "" }) => {
 const UserIcon = () => <User className={coursePageStyles.teacherIcon} />;
 const SearchIcon = () => <Search className={coursePageStyles.searchIcon} />;
 
+// Loading Skeleton Component
+const LoadingSkeleton = () => {
+  return (
+    <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-purple-50">
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: -1000px 0; }
+          100% { background-position: 1000px 0; }
+        }
+        .animate-shimmer {
+          animation: shimmer 2s infinite;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 1000px 100%;
+        }
+        @keyframes pulse-soft {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1; }
+        }
+        .animate-pulse-soft {
+          animation: pulse-soft 1.5s ease-in-out infinite;
+        }
+      `}</style>
+
+      {/* Header Skeleton */}
+      <div className="px-6 py-12 md:px-8 lg:px-12">
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Title */}
+          <div className="h-12 bg-gray-200 rounded-xl animate-shimmer w-1/3"></div>
+
+          {/* Subtitle */}
+          <div className="h-6 bg-gray-200 rounded-xl animate-shimmer w-1/2 opacity-70"></div>
+
+          {/* Search Bar */}
+          <div className="mt-8 space-y-3">
+            <div className="h-12 bg-gray-200 rounded-2xl animate-shimmer"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Courses Grid Skeleton */}
+      <div className="px-6 py-12 md:px-8 lg:px-12">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={index}
+                className="bg-white rounded-2xl overflow-hidden shadow-lg"
+                style={{ opacity: 0.8 - index * 0.05 }}
+              >
+                {/* Image Skeleton */}
+                <div className="w-full h-40 bg-gray-200 animate-shimmer"></div>
+
+                {/* Content */}
+                <div className="p-4 space-y-4">
+                  {/* Title */}
+                  <div className="h-5 bg-gray-200 rounded-lg animate-shimmer w-4/5"></div>
+                  <div className="h-4 bg-gray-200 rounded-lg animate-shimmer w-3/5"></div>
+
+                  {/* Teacher */}
+                  <div className="h-4 bg-gray-200 rounded-lg animate-shimmer w-2/3"></div>
+
+                  {/* Rating */}
+                  <div className="flex gap-1 pt-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-4 h-4 bg-gray-200 rounded-full animate-shimmer"
+                      ></div>
+                    ))}
+                  </div>
+
+                  {/* Price */}
+                  <div className="h-5 bg-gray-200 rounded-lg animate-shimmer w-1/3 mt-3"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Loading Indicator */}
+      <div className="flex justify-center items-center gap-2 pb-12">
+        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse-soft"></div>
+        <div
+          className="w-2 h-2 bg-purple-500 rounded-full animate-pulse-soft"
+          style={{ animationDelay: "0.2s" }}
+        ></div>
+        <div
+          className="w-2 h-2 bg-pink-500 rounded-full animate-pulse-soft"
+          style={{ animationDelay: "0.4s" }}
+        ></div>
+      </div>
+    </div>
+  );
+};
+
 // show 5 interative stars(calls onRate(courseId,rating))
 const RatingStars = ({
   courseId,
@@ -133,9 +229,9 @@ const CoursePage = () => {
       .then(async (json) => {
         if (!mounted) return;
         const raw = json.items || json.courses || [];
-        // filter non-top (existing behavior)
-        const regular = raw.filter((c) =>
-          c.courseType ? c.courseType !== "top" : true,
+        // Show all regular courses (both free and paid), exclude only "top" courses
+        const regular = raw.filter(
+          (c) => !c.courseType || c.courseType !== "top",
         );
 
         const mapped = regular.map((c) => ({
@@ -370,7 +466,7 @@ const CoursePage = () => {
     return "Free";
   };
 
-  if (loading) return <div className="p-6 text-center">Loading courses</div>;
+  if (loading) return <LoadingSkeleton />;
   if (error) return <div className="p-6 text-center text-red-500">{error}</div>;
 
   return (

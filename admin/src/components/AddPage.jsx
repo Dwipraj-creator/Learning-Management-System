@@ -120,6 +120,7 @@ const AddPage = () => {
     totalLectures: "",
     lectures: [],
     courseType: "regular",
+    category: "",
   });
 
   const [currentLecture, setCurrentLecture] = useState({
@@ -495,6 +496,7 @@ const AddPage = () => {
         String(formData.totalLectures || computed.totalLectures || 0),
       );
       fd.append("courseType", formData.courseType);
+      fd.append("category", formData.category);
 
       fd.append("price", JSON.stringify(formData.price));
       fd.append("totalDuration", JSON.stringify(computed.totalDuration));
@@ -690,6 +692,21 @@ const AddPage = () => {
                     onRatingChange={handleRatingChange}
                   />
                 </div>
+              </div>
+
+              <div className={addPageStyles.inputContainer}>
+                <label className={addPageStyles.inputLabel}>
+                  <BookOpenText size={16} className={addPageStyles.inputIcon} />{" "}
+                  Category
+                </label>
+                <input
+                  type="text"
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  className={addPageStyles.input}
+                  placeholder="e.g., Web Development, AI, Business"
+                />
               </div>
 
               <div className={addPageStyles.inputContainer}>

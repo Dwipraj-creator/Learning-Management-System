@@ -103,11 +103,15 @@ export const getPublicCourses = async (req, res) => {
   try {
     const { home, type = "all", limit } = req.query;
     let filter = {};
+
+    // Only filter by courseType if specifically requested for home/top
     if (home === "true") {
       filter.courseType = "top";
     } else if (type === "top") {
       filter.courseType = "top";
     }
+    // Otherwise, return ALL courses (both regular and paid)
+
     let q = Course.find(filter).sort({ createdAt: -1 });
 
     if (home === "true") {
