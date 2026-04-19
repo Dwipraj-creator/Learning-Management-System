@@ -4,8 +4,29 @@ import { features, floatingIcons } from "../assets/dummyBanner";
 import { CircleCheckBig, Sparkle, X } from "lucide-react";
 import bannerImg from "../assets/Bannerimage.jpg";
 import video from "../assets/BannerVideo.mp4";
+import { useUser } from "@clerk/clerk-react";
+import { useNavigate } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
 const Banner = () => {
   const [showVideo, setShowVideo] = useState(false);
+  const { isSignedIn } = useUser();
+  const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    if (isSignedIn) {
+      navigate("/courses");
+    } else {
+      toast.error("Please login first to access courses", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "dark",
+      });
+    }
+  };
 
   return (
     <div className={bannerStyles.container}>
@@ -65,9 +86,12 @@ const Banner = () => {
             </div>
             {/* btns */}
             <div className={bannerStyles.buttonsContainer}>
-              <a href="/courses" className={bannerStyles.buttonGetStarted}>
+              <button
+                onClick={handleGetStarted}
+                className={bannerStyles.buttonGetStarted}
+              >
                 Get Started
-              </a>
+              </button>
               <button
                 className={bannerStyles.buttonViewDemo}
                 onClick={() => setShowVideo(true)}
@@ -122,6 +146,19 @@ const Banner = () => {
           animation: fadeIn 0.3s ease-out forwards;
         } */}
       `}</style>
+
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
+      />
     </div>
   );
 };
